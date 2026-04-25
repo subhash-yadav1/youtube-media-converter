@@ -1,3 +1,49 @@
+FROM node:18-bullseye AS builder
+
+# Install build tools and python/pip (for yt-dlp if needed during build)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3 \
+  python3-pip \
+  ca-certificates \
+  curl \
+  build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install dependencies and build
+COPY package*.json ./
+RUN npm ci
+
+COPY . ./
+RUN npm run build
+RUN npm prune --production || true
+
+FROM node:18-bullseye-slim AS runner
+
+# Install runtime deps and ffmpeg + yt-dlp
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3 \
+  python3-pip \
+  ffmpeg \
+  ca-certificates \
+  curl \
+  && pip3 install --no-cache-dir yt-dlp \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Copy build artifacts
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+EXPOSE 8080
+
+CMD ["npm", "run", "start"]
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1

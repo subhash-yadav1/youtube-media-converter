@@ -38,6 +38,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ConversionJob, MediaKind, VideoInfoPayload } from "@/types/media";
 
+// Allow an optional external API base for split deployments.
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+
+function buildApiPath(path: string) {
+  if (!API_BASE) return path.startsWith("/") ? path : `/${path}`;
+  const cleanedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${API_BASE}/${cleanedPath}`;
+}
+
 function formatDuration(seconds: number | null) {
   if (!seconds) {
     return "Unknown";
@@ -96,11 +105,13 @@ export function DownloaderShell() {
   const [jobError, setJobError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [animatedProgress, setAnimatedProgress] = useState(0);
+  const [thumbnailQuality, setThumbnailQuality] = useState<"maxres" | "hq" | "sd">("maxres");
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextDark = savedTheme ? savedTheme === "dark" : prefersDark;
+    // Default to dark mode when there is no saved preference
+    const nextDark = savedTheme ? savedTheme === "dark" : true;
 
     setIsDark(nextDark);
     applyTheme(nextDark);
@@ -174,7 +185,7 @@ export function DownloaderShell() {
     async function pollJob() {
       while (!cancelled) {
         try {
-          const response = await fetch(`/api/jobs/${jobId}`);
+          const response = await fetch(buildApiPath(`/api/jobs/${jobId}`));
           const payload = (await response.json()) as ConversionJob | { error: string };
 
           if (!cancelled && response.ok && !("error" in payload)) {
@@ -229,7 +240,7 @@ export function DownloaderShell() {
     setJobError(null);
 
     try {
-      const response = await fetch("/api/info", {
+      const response = await fetch(buildApiPath("/api/info"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -266,7 +277,7 @@ export function DownloaderShell() {
     setJobError(null);
 
     try {
-      const response = await fetch("/api/convert", {
+      const response = await fetch(buildApiPath("/api/convert"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -319,13 +330,13 @@ export function DownloaderShell() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.18),transparent_28%),linear-gradient(180deg,#fff9f5_0%,#fff_45%,#fff6ec_100%)] transition-colors dark:bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.16),transparent_24%),linear-gradient(180deg,#09090b_0%,#111827_52%,#18181b_100%)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
         <header className="flex items-center justify-between rounded-[1.5rem] border border-white/60 bg-white/75 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
               <Clapperboard className="size-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">YouTube Media</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">MP4, MP3, and related picks</p>
+              <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">YouTube Media Converter</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">YouTube → MP4, MP3 & HD thumbnail downloader</p>
             </div>
           </div>
 
@@ -441,6 +452,29 @@ export function DownloaderShell() {
                         unoptimized
                       />
                     ) : null}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <Select
+                      value={thumbnailQuality}
+                      onValueChange={(value) => setThumbnailQuality(value as "maxres" | "hq" | "sd")}
+                    >
+                      <SelectTrigger className="h-10 w-44 rounded-2xl bg-white dark:bg-zinc-950/50">
+                        <SelectValue placeholder="Thumbnail quality" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="maxres">Best (maxres)</SelectItem>
+                        <SelectItem value="hq">High (hq)</SelectItem>
+                        <SelectItem value="sd">Standard (sd)</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <a
+                      href={buildApiPath(`/api/thumbnail?id=${info.id}&quality=${thumbnailQuality}`)}
+                      className={buttonVariants({ size: "sm", className: "h-10 rounded-2xl" })}
+                    >
+                      Download thumbnail
+                    </a>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -641,7 +675,7 @@ export function DownloaderShell() {
 
                 {job.stage === "completed" ? (
                   <a
-                    href={`/api/download/${job.id}`}
+                    href={buildApiPath(`/api/download/${job.id}`)}
                     className={buttonVariants({ size: "lg", className: "h-12 rounded-2xl" })}
                   >
                     <ArrowDownToLine />
@@ -720,7 +754,7 @@ export function DownloaderShell() {
         ) : null}
 
         <footer className="border-t border-zinc-200/70 px-1 pt-2 text-center text-sm text-zinc-500 dark:border-white/10 dark:text-zinc-400">
-          <p>Copyright {copyrightYear} YouTube Media. All rights reserved.</p>
+          <p>Copyright {copyrightYear} YouTube Media Converter. All rights reserved.</p>
         </footer>
       </div>
     </main>

@@ -1,3 +1,15 @@
+node_modules
+.next
+dist
+build
+.git
+storage
+vendor
+**/node_modules
+**/.next
+npm-debug.log
+Dockerfile
+docker-compose*.yml
 .git
 .next
 node_modules
